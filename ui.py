@@ -12,7 +12,8 @@ class spiralizer_settings(bpy.types.PropertyGroup):
                                                        ('CCW', 'Couter-clockwise', "")))
     toolpath_type : bpy.props.EnumProperty(name="Toolpath type",
                                            items=(('CURVE', 'Curve', ""),
-                                                  ('MESH', 'Mesh', "")))
+                                                  ('MESH', 'Mesh', ""),
+                                                  ('NOZZLEBOSS', 'Nozzleboss Mesh', "")))
 
 class SlicePanel(bpy.types.Panel):
     bl_idname = "OBJECT_PT_spiralizer"

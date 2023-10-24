@@ -2,6 +2,7 @@ import bpy
 import bmesh
 import math
 import mathutils
+from itertools import pairwise
 
 def get_slice_idx(me, idx):
     return me.attributes['slice_idx'].data[idx].value
@@ -211,6 +212,43 @@ def spiralize(context, rotation_direction, default_extrusion_height, default_ext
         attribute = new_geo.attributes.new(name="extrusion_width", type="FLOAT", domain="POINT")
         attribute.data.foreach_set("value", extrusion_widths)
 
+    elif toolpath_type == 'NOZZLEBOSS':
+        vs = []
+        es = []
+        fs = []
+
+        v0 = interp_vs[0]
+        vs.append(v0)
+        v_below = (v0[0], v0[1], v0[2] - extrusion_heights[0])
+        vs.append(v_below)
+
+        for v_, v_next_ in pairwise(enumerate(interp_vs)):
+            i, v = v_
+            i_next, v_next = v_next_
+            
+            # Append two vertices, top and bottom
+            vs.append(v_next)
+            v_next_below = (v_next[0],
+                            v_next[1],
+                            v_next[2] - extrusion_heights[i+1])
+            vs.append(v_next_below)
+
+            # es.append((ti+1, ti+3))
+            # es.append((ti+3, ti+2))
+            # es.append((ti+2, ti))
+            i = i*2
+            i_next = i_next*2
+            fs.append((i, i+1, i_next+1, i_next))
+
+            # if i >= 2:
+            #     fs.pop()
+            #     break
+
+        fs.pop()
+        print(vs, es, fs)
+        new_geo = bpy.data.meshes.new(name=result_name)
+        new_geo.validate(verbose=True)
+        new_geo.from_pydata(vs, es, fs)
 
     elif toolpath_type == 'CURVE':
         new_geo = bpy.data.curves.new(name=result_name, type='CURVE')

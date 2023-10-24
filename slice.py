@@ -81,5 +81,5 @@ class SliceOperator(bpy.types.Operator):
     
     def execute(self, context):
         props = context.scene.spiralizer_settings
-        slice(context, props.layer_height)
+        slice(context, props.extrusion_height)
         return {'FINISHED'}
