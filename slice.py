@@ -27,6 +27,8 @@ def slice(context, dz):
     context.view_layer.active_layer_collection.collection.objects.link(result_ob)    
            
     for i in range(N):
+        print(f"Slicing {i}/{N}")
+        
         # Select original object
         original_ob.select_set(True)
         context.view_layer.objects.active = original_ob

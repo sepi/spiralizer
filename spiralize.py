@@ -2,6 +2,7 @@ import bpy
 import bmesh
 import math
 import mathutils
+import os
 from itertools import pairwise
 
 def get_slice_idx(me, idx):
@@ -109,11 +110,7 @@ def spiralize(context, rotation_direction, default_extrusion_height, default_ext
     extrusion_heights = []
     extrusion_widths = []
 
-    #cur_layer = layer_0 # verts in current layer
-    #next_layer = layer_1 # verts in next layer
-    #verts_in_layer = len(layer_1)
-
-    v = v_0 # start with some random vertex in layer 0
+    v_start_layer = v_0 # start with some random vertex in layer 0
     prev_interp_co = v_0.co # initialize previous interpolation coordinate to v_0.co
     e = e_0 # start in previously determined direction
     vert_idx = 0
@@ -122,6 +119,7 @@ def spiralize(context, rotation_direction, default_extrusion_height, default_ext
     extrusion_height = default_extrusion_height
     extrusion_width = default_extrusion_width
 
+    # Count layers
     layer_idx_max = 0
     while True:
         vs = get_layer_verts(me, bm, layer_idx_max)
@@ -132,6 +130,7 @@ def spiralize(context, rotation_direction, default_extrusion_height, default_ext
             layer_idx_max = layer_idx_max + 1
 
     # TODO: Inset by half extrusion_width.
+    # TODO: maybe loop until layer_idx_max instead.
     while True:
         cur_layer = get_layer_verts(me, bm, layer_idx)
         next_layer = get_layer_verts(me, bm, layer_idx+1)
@@ -158,22 +157,32 @@ def spiralize(context, rotation_direction, default_extrusion_height, default_ext
         print(f"layer_idx: {layer_idx}, ramp_mode: {ramp_mode}")
         print("verts in layer", verts_in_layer)
 
-        for i in range(verts_in_layer+1):
+        v = v_start_layer # for this layer
+        
+        for i in range(verts_in_layer):
             alpha = i / (verts_in_layer+0) # 0 at beginning of layer, 1 at end
+
+            # Find point one up
+            higher_v_co, higher_v_idx = find_closest_v(kd, next_layer_idxs, v)
+            if higher_v_co is None:
+                break
+
+            # How to interpolate between this and next layer?
             if ramp_mode == 'FLAT':
                 lerp_factor = 1.0 # Use top curve
             elif ramp_mode == 'RAMP_DOWN':
                 lerp_factor = 0.0 # Use bottom curve
             else:
                 lerp_factor = alpha
-            higher_v_co, higher_v_idx = find_closest_v(kd, next_layer_idxs, v)
-            if higher_v_co is None:
-                break
+
+
+            # Toolhead position
             prev_interp_co = interp_co
             interp_co = v.co.lerp(higher_v_co, lerp_factor)
-            [e, v] = next_ev(e, v)
             interp_vs.append((interp_co.x, interp_co.y, interp_co.z))
             interp_es.append((vert_idx, vert_idx+1))
+
+            # Extrusion amount control
             if ramp_mode == 'RAMP_UP':
                 extrusion_height = alpha * default_extrusion_height
             elif ramp_mode == 'RAMP_DOWN':
@@ -182,19 +191,20 @@ def spiralize(context, rotation_direction, default_extrusion_height, default_ext
                 extrusion_height = default_extrusion_height
             extrusion_heights.append(extrusion_height)
             extrusion_widths.append(extrusion_width)
-            
+
+            # Advance to next edge and vertex
+            [e, v] = next_ev(e, v)
             vert_idx = vert_idx + 1
 
         print("starting new layer at idx", higher_v_idx)
         
         try:
-            # if first_layer:
-            #     first_layer = False
-            #     v = v_0
-            # else:
-            v = bm.verts[higher_v_idx]
+            next_layer = get_layer_verts(me, bm, layer_idx+1)
+            next_layer_idxs = {v.index for v in next_layer}
+            higher_v_co, higher_v_idx = find_closest_v(kd, next_layer_idxs, v_start_layer)
+            v_start_layer = bm.verts[higher_v_idx]
+            e = find_edge_in_same_direction(prev_interp_co, v_start_layer)
             layer_idx = layer_idx + 1
-            e = find_edge_in_same_direction(prev_interp_co, v)
         except (IndexError, AttributeError):
             break
 
@@ -214,41 +224,27 @@ def spiralize(context, rotation_direction, default_extrusion_height, default_ext
 
     elif toolpath_type == 'NOZZLEBOSS':
         vs = []
-        es = []
         fs = []
 
-        v0 = interp_vs[0]
-        vs.append(v0)
-        v_below = (v0[0], v0[1], v0[2] - extrusion_heights[0])
-        vs.append(v_below)
+        # Top vertices of strip
+        for v in interp_vs:
+            vs.append(v)
 
-        for v_, v_next_ in pairwise(enumerate(interp_vs)):
-            i, v = v_
-            i_next, v_next = v_next_
+        # Bottom vertices of strip
+        v_count = len(interp_vs)
+        for i, v in enumerate(interp_vs):
+            v_below = (v[0],
+                       v[1],
+                       v[2] - extrusion_heights[i])
+            vs.append(v_below)
+
+
+            fs.append((i, i+1, v_count+i+1, v_count+i))
             
-            # Append two vertices, top and bottom
-            vs.append(v_next)
-            v_next_below = (v_next[0],
-                            v_next[1],
-                            v_next[2] - extrusion_heights[i+1])
-            vs.append(v_next_below)
-
-            # es.append((ti+1, ti+3))
-            # es.append((ti+3, ti+2))
-            # es.append((ti+2, ti))
-            i = i*2
-            i_next = i_next*2
-            fs.append((i, i+1, i_next+1, i_next))
-
-            # if i >= 2:
-            #     fs.pop()
-            #     break
-
         fs.pop()
-        print(vs, es, fs)
         new_geo = bpy.data.meshes.new(name=result_name)
         new_geo.validate(verbose=True)
-        new_geo.from_pydata(vs, es, fs)
+        new_geo.from_pydata(vs, [], fs)
 
     elif toolpath_type == 'CURVE':
         new_geo = bpy.data.curves.new(name=result_name, type='CURVE')
@@ -285,4 +281,75 @@ class SpiralizeOperator(bpy.types.Operator):
         spiralize(context, props.rotation_direction,
                   props.extrusion_height, props.extrusion_width,
                   props.toolpath_type)
+        return {'FINISHED'}
+
+def export(context, gcode_directory, start_gcode, end_gcode):
+    if gcode_directory == '':
+        directory = '//' + os.path.splitext(bpy.path.basename(bpy.context.blend_data.filepath))[0]
+    else:
+        directory = gcode_directory
+    if '.gcode' not in directory: directory += '.gcode'
+    path = bpy.path.abspath(directory)
+    with open(path, 'w') as export_file:
+        # Write start gcode
+        try:
+            for line in bpy.data.texts[start_gcode].lines:
+                export_file.write(line.body + '\n')
+        except:
+            pass
+
+        # Get mesh from object
+        obj_orig = context.object
+        depsgraph = context.evaluated_depsgraph_get()
+        obj = obj_orig.evaluated_get(depsgraph) # eval in order to make geometry nodes happen
+        me = obj.data
+
+        # Go to first point
+        co = me.vertices[0].co
+        export_file.write(f"G0 X{co.x} Y{co.y} Z{co.z}\n")
+
+        # Init export loop
+        v_last = me.vertices[0]
+        h_last = me.attributes['extrusion_height'].data[0].value
+        w_last = me.attributes['extrusion_width'].data[0].value
+        e = 0 # Accumulate extrusion coordinate
+        for i in range(1, len(me.vertices)):
+            v = me.vertices[i]
+            co = v.co
+
+            # Extrusion params
+            h = me.attributes['extrusion_height'].data[i].value
+            w = me.attributes['extrusion_width'].data[i].value
+            l_out = (v.co - v_last.co).length # length of material going out
+            volume_out = l_out * h * w # volume going out
+            l_in = volume_out / (math.pi * (1.75/2)**2) # length of filament going in
+
+            e = e + l_in
+            export_file.write(f"G1 X{co.x} Y{co.y} Z{co.z} E{e}\n")
+
+            l_last = v
+            h_last = h
+            w_last = w
+    
+        # Write end gcode
+        try:
+            for line in bpy.data.texts[start_gcode].lines:
+                export_file.write(line.body + '\n')
+        except:
+            pass
+    
+    
+class GcodeExportOperator(bpy.types.Operator):
+    bl_idname = "spiralizer.gcode_export"
+    bl_label = "Export Gcode"
+    bl_description = ("Export selected mesh")
+    bl_options = {'REGISTER', 'UNDO'}
+    
+    @classmethod
+    def poll(cls, context):
+        return context.active_object is not None
+
+    def execute(self, context):
+        props = context.scene.spiralizer_settings
+        export(context, props.gcode_directory, props.start_gcode, props.end_gcode)
         return {'FINISHED'}

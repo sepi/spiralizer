@@ -15,6 +15,18 @@ class spiralizer_settings(bpy.types.PropertyGroup):
                                                   ('MESH', 'Mesh', ""),
                                                   ('NOZZLEBOSS', 'Nozzleboss Mesh', "")))
 
+    gcode_directory : bpy.props.StringProperty(
+        name="File", default="", subtype='FILE_PATH',
+        description = 'Destination directory.\nIf missing, the .blend-file directory will be used'
+    )
+    start_gcode : bpy.props.StringProperty(
+        name="Start g-code", default='', description="Text block for starting g-code"
+    )
+    end_gcode : bpy.props.StringProperty(
+        name="End g-code", default='', description="Text block for end g-code"
+    )
+
+
 class SlicePanel(bpy.types.Panel):
     bl_idname = "OBJECT_PT_spiralizer"
     bl_category = "Spiralizer"
@@ -49,3 +61,13 @@ class SlicePanel(bpy.types.Panel):
         
         row3 = col.row()
         row3.operator('spiralizer.spiralize')
+
+        col.separator()
+        col.label(text='Export', icon='TEXT')
+        col.prop_search(props, 'start_gcode', bpy.data, 'texts')
+        col.prop_search(props, 'end_gcode', bpy.data, 'texts')
+        col.prop(props, 'gcode_directory')
+        
+        row4 = col.row(align=True)
+        row4.scale_y = 2.0
+        row4.operator('spiralizer.gcode_export')
