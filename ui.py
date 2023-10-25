@@ -7,6 +7,14 @@ class spiralizer_settings(bpy.types.PropertyGroup):
     extrusion_width : bpy.props.FloatProperty(name="Extrusion width",
                                               default=0.1,
                                               soft_min=0.2, soft_max=1.1)
+
+    extrusion_feed_rate: bpy.props.IntProperty(name="Extrusion feed rate (mm/s)",
+                                               default=20,
+                                               soft_min=5, soft_max=200)
+    travel_feed_rate : bpy.props.FloatProperty(name="Travel feed rate (mm/s)",
+                                               default=100,
+                                               soft_min=5, soft_max=200)
+
     rotation_direction : bpy.props.EnumProperty(name="Rotation direction",
                                                 items=(('CW', 'Clockwise', ""),
                                                        ('CCW', 'Couter-clockwise', "")))
@@ -46,9 +54,11 @@ class SlicePanel(bpy.types.Panel):
         col = layout.column(align=True)
         row1 = col.row()
         row1.prop(props, 'extrusion_height')
-
-        row12 = col.row()
         row1.prop(props, 'extrusion_width')
+
+        row13 = col.row()
+        row13.prop(props, 'extrusion_feed_rate')
+        row13.prop(props, 'travel_feed_rate')
         
         row2 = col.row()
         row2.prop(props, 'rotation_direction')

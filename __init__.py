@@ -10,13 +10,12 @@ bl_info = {
 
 import bpy
 
-from . import slice, spiralize
-from . import ui
+from . import slice, spiralize, export, ui
 
 classes = [
     slice.SliceOperator,
     spiralize.SpiralizeOperator,
-    spiralize.GcodeExportOperator,
+    export.GcodeExportOperator,
     ui.SlicePanel,
     ui.spiralizer_settings
 ]

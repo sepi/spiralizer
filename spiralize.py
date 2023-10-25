@@ -1,9 +1,6 @@
 import bpy
 import bmesh
-import math
 import mathutils
-import os
-from itertools import pairwise
 
 def get_slice_idx(me, idx):
     return me.attributes['slice_idx'].data[idx].value
@@ -59,7 +56,6 @@ def polygon_direction(v_0, e_idx):
         s = s + (v_next.co.x - v.co.x) * (v_next.co.y - v.co.y)
         v_next = v_next.link_edges[e_idx].other_vert(v_next)
         v = v_next
-
         if v == v_0:
             return s
 
@@ -283,73 +279,3 @@ class SpiralizeOperator(bpy.types.Operator):
                   props.toolpath_type)
         return {'FINISHED'}
 
-def export(context, gcode_directory, start_gcode, end_gcode):
-    if gcode_directory == '':
-        directory = '//' + os.path.splitext(bpy.path.basename(bpy.context.blend_data.filepath))[0]
-    else:
-        directory = gcode_directory
-    if '.gcode' not in directory: directory += '.gcode'
-    path = bpy.path.abspath(directory)
-    with open(path, 'w') as export_file:
-        # Write start gcode
-        try:
-            for line in bpy.data.texts[start_gcode].lines:
-                export_file.write(line.body + '\n')
-        except:
-            pass
-
-        # Get mesh from object
-        obj_orig = context.object
-        depsgraph = context.evaluated_depsgraph_get()
-        obj = obj_orig.evaluated_get(depsgraph) # eval in order to make geometry nodes happen
-        me = obj.data
-
-        # Go to first point
-        co = me.vertices[0].co
-        export_file.write(f"G0 X{co.x} Y{co.y} Z{co.z}\n")
-
-        # Init export loop
-        v_last = me.vertices[0]
-        h_last = me.attributes['extrusion_height'].data[0].value
-        w_last = me.attributes['extrusion_width'].data[0].value
-        e = 0 # Accumulate extrusion coordinate
-        for i in range(1, len(me.vertices)):
-            v = me.vertices[i]
-            co = v.co
-
-            # Extrusion params
-            h = me.attributes['extrusion_height'].data[i].value
-            w = me.attributes['extrusion_width'].data[i].value
-            l_out = (v.co - v_last.co).length # length of material going out
-            volume_out = l_out * h * w # volume going out
-            l_in = volume_out / (math.pi * (1.75/2)**2) # length of filament going in
-
-            e = e + l_in
-            export_file.write(f"G1 X{co.x} Y{co.y} Z{co.z} E{e}\n")
-
-            l_last = v
-            h_last = h
-            w_last = w
-    
-        # Write end gcode
-        try:
-            for line in bpy.data.texts[start_gcode].lines:
-                export_file.write(line.body + '\n')
-        except:
-            pass
-    
-    
-class GcodeExportOperator(bpy.types.Operator):
-    bl_idname = "spiralizer.gcode_export"
-    bl_label = "Export Gcode"
-    bl_description = ("Export selected mesh")
-    bl_options = {'REGISTER', 'UNDO'}
-    
-    @classmethod
-    def poll(cls, context):
-        return context.active_object is not None
-
-    def execute(self, context):
-        props = context.scene.spiralizer_settings
-        export(context, props.gcode_directory, props.start_gcode, props.end_gcode)
-        return {'FINISHED'}
