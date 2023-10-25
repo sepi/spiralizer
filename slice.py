@@ -30,6 +30,8 @@ def slice(context, dz):
         print(f"Slicing {i}/{N}")
         
         # Select original object
+        for o in bpy.context.scene.collection.objects:
+            o.select_set(False)
         original_ob.select_set(True)
         context.view_layer.objects.active = original_ob
 
