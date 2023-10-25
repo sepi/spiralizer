@@ -22,12 +22,19 @@ def slice(context, dz):
     # Prepare empty mesh to put result vertices
     mesh_data = bpy.data.meshes.new(name="spiralizer_result")
     result_ob = bpy.data.objects.new(name="spiralizer_result", object_data=mesh_data)
-
+    result_ob.data['spiralizer_object_type'] = 'SLICES'
+    result_ob.data['spiralizer_slice_count'] = N
+    
     # prerequisit for selection
     context.view_layer.active_layer_collection.collection.objects.link(result_ob)    
-           
+
+    # progress display
+    wm = bpy.context.window_manager
+    wm.progress_begin(0, N)
+    
     for i in range(N):
         print(f"Slicing {i}/{N}")
+        wm.progress_update(i)
         
         # Select original object
         for o in bpy.context.scene.collection.objects:
@@ -70,6 +77,7 @@ def slice(context, dz):
         if bpy.ops.object.join.poll():
             bpy.ops.object.join()
 
+    wm.progress_end()
 
 class SliceOperator(bpy.types.Operator):
     """Slices the selected model along the z-axis"""
@@ -78,7 +86,7 @@ class SliceOperator(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
-        return context.active_object is not None
+        return context.object is not None and context.mode in {'OBJECT'} and context.active_object.data.get('spiralizer_object_type', None) == None
     
 #    def invoke(self, context, event):
 #        return context.window_manager.invoke_props_dialog(self)

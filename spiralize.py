@@ -116,15 +116,12 @@ def spiralize(context, rotation_direction, default_extrusion_height, default_ext
     extrusion_width = default_extrusion_width
 
     # Count layers
-    layer_idx_max = 0
-    while True:
-        vs = get_layer_verts(me, bm, layer_idx_max)
-        if len(vs) == 0:
-            layer_idx_max = layer_idx_max - 1
-            break
-        else:
-            layer_idx_max = layer_idx_max + 1
+    layer_idx_max = obj.data['spiralizer_slice_count']
 
+    # Progress bar
+    wm = context.window_manager
+    wm.progress_begin(0, layer_idx_max)
+            
     # TODO: Inset by half extrusion_width.
     # TODO: maybe loop until layer_idx_max instead.
     while True:
@@ -193,6 +190,7 @@ def spiralize(context, rotation_direction, default_extrusion_height, default_ext
             vert_idx = vert_idx + 1
 
         print("starting new layer at idx", higher_v_idx)
+        wm.progress_update(layer_idx)
         
         try:
             next_layer = get_layer_verts(me, bm, layer_idx+1)
@@ -203,6 +201,8 @@ def spiralize(context, rotation_direction, default_extrusion_height, default_ext
             layer_idx = layer_idx + 1
         except (IndexError, AttributeError):
             break
+
+    wm.progress_end()
 
     # Create the geometry bearing objects: Either a MESH or a CURVE
     result_name = obj.name+'_spiral'
@@ -258,6 +258,7 @@ def spiralize(context, rotation_direction, default_extrusion_height, default_ext
 
 
     new_obj = bpy.data.objects.new(new_geo.name, new_geo)
+    new_obj.data['spiralizer_object_type'] = 'SPIRAL'
     col = bpy.data.collections['Results']
     col.objects.link(new_obj)
     print("done")
@@ -270,7 +271,7 @@ class SpiralizeOperator(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
-        return context.active_object is not None
+        return context.object is not None and context.mode in {'OBJECT'} and context.active_object.data.get('spiralizer_object_type', None) == 'SLICES'
     
     def execute(self, context):
         props = context.scene.spiralizer_settings
