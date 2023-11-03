@@ -3,7 +3,31 @@ import math
 import os
 
 def mms_to_mmmin(mms):
-    return mms*60.0
+    return int(mms*60.0)
+
+ARG_SORT = {
+    'X': 1,
+    'Y': 2,
+    'Z': 3,
+    'E': 4,
+    'F': 5
+}
+def code(opcode, **kwargs):
+    """Generate a g-code line"""
+    args = sorted(kwargs.items(), key=lambda it: ARG_SORT[it[0].upper()])
+    if "co" in args:
+        args["x"] = co.x
+        args["y"] = co.y
+        args["z"] = co.z
+        del args["co"]
+    arg_strs = []
+    for arg, val in args:
+        arg_strs.append(arg.upper() + str(val))
+    return " ".join([opcode.upper()] + arg_strs)
+
+def write_code(stream, opcode, **kwargs):
+    """Write a g-code line to stream ended by newline"""
+    stream.write(code(opcode, **kwargs) + "\n");
     
 def export(context, gcode_directory, start_gcode, end_gcode, travel_feed_rate, extrusion_feed_rate):
     if gcode_directory == '':
@@ -28,7 +52,7 @@ def export(context, gcode_directory, start_gcode, end_gcode, travel_feed_rate, e
 
         # Go to first point
         co = me.vertices[0].co
-        export_file.write(f"G0 X{co.x} Y{co.y} Z{co.z} F{mms_to_mmmin(travel_feed_rate)}\n")
+        write_code(export_file, "G0", co=co, f=mms_to_mmmin(travel_feed_rate))
 
         # Init export loop
         v_last = me.vertices[0]
@@ -47,8 +71,8 @@ def export(context, gcode_directory, start_gcode, end_gcode, travel_feed_rate, e
             l_in = volume_out / (math.pi * (1.75/2)**2) # length of filamgent going in
             e = e + l_in
 
-            # Write that line
-            export_file.write(f"G1 X{co.x} Y{co.y} Z{co.z} E{e} F{mms_to_mmmin(extrusion_feed_rate)}\n")
+            # Write that line  F{mms_to_mmmin(extrusion_feed_rate)}
+            write_code(export_file, "G1", co=co, e=e)
 
             l_last = v
             h_last = h
