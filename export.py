@@ -22,7 +22,7 @@ def code(opcode, **kwargs):
     args = sorted(kwargs.items(), key=lambda it: ARG_SORT[it[0].upper()])
     arg_strs = []
     for arg, val in args:
-        arg_strs.append(arg.upper() + str(val))
+        arg_strs.append(arg.upper() + "{:.6f}".format(val))
     return " ".join([opcode.upper()] + arg_strs)
 
 def write_code(stream, opcode, **kwargs):
@@ -32,8 +32,17 @@ def write_code(stream, opcode, **kwargs):
 def offset_z(co, dz):
     co.z = co.z + dz
     return co
+
+def write_code_from_block(stream, block):
+    try:
+        for line in bpy.data.texts[block].lines:
+            stream.write(line.body + '\n')
+    except:
+        pass
     
-def export(context, gcode_directory, start_gcode, end_gcode, travel_feed_rate, extrusion_feed_rate, z_offset):
+def export(context, gcode_directory,
+           start_gcode, filament_change_gcode, end_gcode,
+           travel_feed_rate, extrusion_feed_rate, z_offset):
     if gcode_directory == '':
         directory = '//' + os.path.splitext(bpy.path.basename(bpy.context.blend_data.filepath))[0]
     else:
@@ -41,12 +50,7 @@ def export(context, gcode_directory, start_gcode, end_gcode, travel_feed_rate, e
     if '.gcode' not in directory: directory += '.gcode'
     path = bpy.path.abspath(directory)
     with open(path, 'w') as export_file:
-        # Write start gcode
-        try:
-            for line in bpy.data.texts[start_gcode].lines:
-                export_file.write(line.body + '\n')
-        except:
-            pass
+        write_code_from_block(export_file, start_gcode)
 
         # Get mesh from object
         obj_orig = context.object
@@ -65,6 +69,7 @@ def export(context, gcode_directory, start_gcode, end_gcode, travel_feed_rate, e
         v_last = me.vertices[0]
         h_last = me.attributes['extrusion_height'].data[0].value
         w_last = me.attributes['extrusion_width'].data[0].value
+        mi_last = me.attributes['extrusion_material_idx'].data[0].value
         e = 0 # Accumulate extrusion coordinate
         for i in range(1, len(me.vertices)):
             v = me.vertices[i]
@@ -73,25 +78,26 @@ def export(context, gcode_directory, start_gcode, end_gcode, travel_feed_rate, e
             # Extrusion params
             h = me.attributes['extrusion_height'].data[i].value
             w = me.attributes['extrusion_width'].data[i].value
+            mi = me.attributes['extrusion_material_idx'].data[i].value
             l_out = (v.co - v_last.co).length # length of material going out
             volume_out = l_out * h * w # volume going out
             l_in = volume_out / (math.pi * (1.75/2)**2) # length of filamgent going in
             e = e + l_in
 
             # Write that line  F{mms_to_mmmin(extrusion_feed_rate)}
-            write_code(export_file, "G1", co=offset_z(co, dz), e=e)
+            write_code(export_file, "G1", co=offset_z(co, dz), e=l_in, f=mms_to_mmmin(extrusion_feed_rate))
 
+            if (mi_last != mi):
+                write_code_from_block(export_file, filament_change_gcode)
+            
             l_last = v
             h_last = h
             w_last = w
             v_last = v
+            mi_last = mi
     
         # Write end gcode
-        try:
-            for line in bpy.data.texts[start_gcode].lines:
-                export_file.write(line.body + '\n')
-        except:
-            pass
+        write_code_from_block(export_file, end_gcode)
     return path
     
 class GcodeExportOperator(bpy.types.Operator):
@@ -106,7 +112,8 @@ class GcodeExportOperator(bpy.types.Operator):
 
     def execute(self, context):
         props = context.scene.spiralizer_settings
-        path = export(context, props.gcode_directory, props.start_gcode, props.end_gcode,
+        path = export(context, props.gcode_directory,
+                      props.start_gcode, props.filament_change_gcode, props.end_gcode,
                       props.travel_feed_rate, props.extrusion_feed_rate, props.z_offset)
         self.report({'INFO'}, f"Successfully wrote g-code to {path}.")
         return {'FINISHED'}

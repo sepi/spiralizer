@@ -35,10 +35,16 @@ class spiralizer_settings(bpy.types.PropertyGroup):
         description = 'Destination directory.\nIf missing, the .blend-file directory will be used'
     )
     start_gcode : bpy.props.StringProperty(
-        name="Start g-code", default='', description="Text block for starting g-code"
+        name="Start g-code", default='',
+        description="Text block for starting g-code"
+    )
+    filament_change_gcode : bpy.props.StringProperty(
+        name="Filament ch. g-code", default='',
+        description="Text block inserted when filament changed"
     )
     end_gcode : bpy.props.StringProperty(
-        name="End g-code", default='', description="Text block for end g-code"
+        name="End g-code", default='',
+        description="Text block for end g-code"
     )
 
 
@@ -86,6 +92,7 @@ class SlicePanel(bpy.types.Panel):
         col.label(text='Export', icon='TEXT')
         col.prop_search(props, 'start_gcode', bpy.data, 'texts')
         col.prop_search(props, 'end_gcode', bpy.data, 'texts')
+        col.prop_search(props, 'filament_change_gcode', bpy.data, 'texts')
         col.prop(props, 'gcode_directory')
         col.prop(props, 'z_offset')
         

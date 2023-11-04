@@ -105,6 +105,7 @@ def spiralize(context, rotation_direction, default_extrusion_height, default_ext
     interp_es = [] # interpolated edges
     extrusion_heights = []
     extrusion_widths = []
+    extrusion_material_idxs = []
 
     interp_co = v_start_layer.co
     e = e_0 # start in previously determined direction
@@ -116,6 +117,7 @@ def spiralize(context, rotation_direction, default_extrusion_height, default_ext
     print_phase = None
     print_subphase = None
     read_layer_idx_delta = None
+    extrusion_material_idx = 0
     extrusion_height = default_extrusion_height
     extrusion_width = default_extrusion_width
 
@@ -160,6 +162,7 @@ def spiralize(context, rotation_direction, default_extrusion_height, default_ext
         elif print_phase == 'FILAMENT_CHANGE' and print_subphase == 'RAMP_DOWN':
             print_subphase = 'RAMP_UP'
             read_layer_idx_delta = 1
+            extrusion_material_idx = extrusion_material_idx + 1
         elif print_phase == 'FILAMENT_CHANGE' and print_subphase == 'RAMP_UP':
             print_phase = 'SPIRAL'
             print_subphase = 'SPIRAL'
@@ -233,6 +236,7 @@ def spiralize(context, rotation_direction, default_extrusion_height, default_ext
                 
             extrusion_heights.append(extrusion_height)
             extrusion_widths.append(extrusion_width)
+            extrusion_material_idxs.append(extrusion_material_idx)
 
             # Advance to next edge and vertex
             [e, v] = next_ev(e, v)
@@ -268,6 +272,9 @@ def spiralize(context, rotation_direction, default_extrusion_height, default_ext
 
         attribute = new_geo.attributes.new(name="extrusion_width", type="FLOAT", domain="POINT")
         attribute.data.foreach_set("value", extrusion_widths)
+
+        attribute = new_geo.attributes.new(name="extrusion_material_idx", type="INT", domain="POINT")
+        attribute.data.foreach_set("value", extrusion_material_idxs)
 
     elif toolpath_type == 'NOZZLEBOSS':
         vs = []
