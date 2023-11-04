@@ -23,6 +23,9 @@ class spiralizer_settings(bpy.types.PropertyGroup):
                                                   ('MESH', 'Mesh', ""),
                                                   ('NOZZLEBOSS', 'Nozzleboss Mesh', "")))
 
+    filament_change_layers : bpy.props.StringProperty(name="Filament change layers",
+                                                      default="")
+
     gcode_directory : bpy.props.StringProperty(
         name="File", default="", subtype='FILE_PATH',
         description = 'Destination directory.\nIf missing, the .blend-file directory will be used'
@@ -68,6 +71,9 @@ class SlicePanel(bpy.types.Panel):
         
         row2 = col.row()
         row2.operator('spiralizer.slice')
+
+        row = col.row()
+        row.prop(props, 'filament_change_layers')
         
         row3 = col.row()
         row3.operator('spiralizer.spiralize')

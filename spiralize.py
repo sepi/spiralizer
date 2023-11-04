@@ -59,7 +59,7 @@ def polygon_direction(v_0, e_idx):
         if v == v_0:
             return s
 
-def spiralize(context, rotation_direction, default_extrusion_height, default_extrusion_width, toolpath_type):
+def spiralize(context, rotation_direction, default_extrusion_height, default_extrusion_width, toolpath_type, filament_change_layers):
     print("Spiralize start")
     
     # Get mesh from object
@@ -82,23 +82,23 @@ def spiralize(context, rotation_direction, default_extrusion_height, default_ext
     kd.balance()
 
     # Initialize variables for layer iterations
-    layer_0 = get_layer_verts(me, bm, 0)
-    v_0 = layer_0[0]
+    read_layer_idx = 1
+    spiral_turn_idx = 0
+    v_start_layer = get_layer_verts(me, bm, read_layer_idx)[0] # random vertex on starting layer
 
     # determine edge to follow for wanted direction
-    wanted_rotation_direction = 1 if rotation_direction == 'CW' else -1
-    print("Rotating in direction 1=cw, -1=ccw: ", wanted_rotation_direction)
-    try:
-        rot_dir0 = polygon_direction(v_0, 0)
-        if rot_dir0 * wanted_rotation_direction > 0:
-            wanted_edge_idx = 0
-        else:
-            wanted_edge_idx = 1
-        e_0 = v_0.link_edges[wanted_edge_idx]
-    except IndexError: # happens when layer is a single vertex for example
-        e_0 = None
-
-    layer_1 = get_layer_verts(me, bm, 1)
+    # wanted_rotation_direction = 1 if rotation_direction == 'CW' else -1
+    # print("Rotating in direction 1=cw, -1=ccw: ", wanted_rotation_direction)
+    # try:
+    #     rot_dir0 = polygon_direction(v_start_layer, 0)
+    #     if rot_dir0 * wanted_rotation_direction > 0:
+    #         wanted_edge_idx = 0
+    #     else:
+    #         wanted_edge_idx = 1
+    #     e_0 = v_start_layer.link_edges[wanted_edge_idx]
+    # except IndexError: # happens when layer is a single vertex for example
+    #     e_0 = None
+    e_0 = v_start_layer.link_edges[0]
 
     # Work
     interp_vs = [] # interpolated vertices
@@ -106,82 +106,131 @@ def spiralize(context, rotation_direction, default_extrusion_height, default_ext
     extrusion_heights = []
     extrusion_widths = []
 
-    v_start_layer = v_0 # start with some random vertex in layer 0
-    prev_interp_co = v_0.co # initialize previous interpolation coordinate to v_0.co
+    interp_co = v_start_layer.co
     e = e_0 # start in previously determined direction
     vert_idx = 0
-    layer_idx = 0
-    ramp_mode = 'FLAT'
+    read_layer_idx = 1
+    spiral_turn_idx = 0
+    ramp_mode = None
+    thickness_mode = None
+    print_phase = None
+    print_subphase = None
+    read_layer_idx_delta = None
     extrusion_height = default_extrusion_height
     extrusion_width = default_extrusion_width
 
     # Count layers
-    layer_idx_max = obj.data['spiralizer_slice_count']
+    read_layer_count = obj.data['spiralizer_slice_count']
 
     # Progress bar
     wm = context.window_manager
-    wm.progress_begin(0, layer_idx_max)
+    wm.progress_begin(0, read_layer_count)
             
     # TODO: Inset by half extrusion_width.
-    # TODO: maybe loop until layer_idx_max instead.
+    # TODO: maybe loop until read_layer_count instead.
     while True:
-        cur_layer = get_layer_verts(me, bm, layer_idx)
-        next_layer = get_layer_verts(me, bm, layer_idx+1)
+        # print_phase  print_subphase
+        # ---------------------------
+        # BOTTOM       FLAT
+        # BOTTOM       RAMP_UP
+        # SPIRAL       SPIRAL
+        # ...
+        # SPIRAL       SPIRAL
+        # FILAMENT_CH. RAMP_DOWN
+        # FILAMENT_CH. RAMP_UP
+        # SPIRAL       SPIRAL
+        # ...
+        # SPIRAL       SPIRAL
+        # TOP          RAMP_DOWN
+        if spiral_turn_idx == 0:
+            print_phase = 'BOTTOM'
+            print_subphase = 'FLAT'
+            read_layer_idx_delta = 0
+        elif print_phase == 'BOTTOM' and print_subphase == 'FLAT':
+            print_subphase = 'RAMP_UP'
+            read_layer_idx_delta = 1
+        elif print_phase == 'BOTTOM' and print_subphase == 'RAMP_UP':
+            print_phase = 'SPIRAL'
+            print_subphase = 'SPIRAL'
+            read_layer_idx_delta = 1
+        elif read_layer_idx in filament_change_layers and ramp_mode == 'SPIRAL':
+            print_phase = 'FILAMENT_CHANGE'
+            print_subphase = 'RAMP_DOWN'
+            read_layer_idx_delta = 0
+        elif print_phase == 'FILAMENT_CHANGE' and print_subphase == 'RAMP_DOWN':
+            print_subphase = 'RAMP_UP'
+            read_layer_idx_delta = 1
+        elif print_phase == 'FILAMENT_CHANGE' and print_subphase == 'RAMP_UP':
+            print_phase = 'SPIRAL'
+            print_subphase = 'SPIRAL'
+            read_layer_idx_delta = 1
+        elif read_layer_idx == read_layer_count-1 and read_layer_idx_delta == 1:
+            print_phase = 'TOP'
+            print_subphase = 'RAMP_DOWN'
+            read_layer_idx_delta = 0
+        elif read_layer_idx == read_layer_count-1 and read_layer_idx_delta == 0:
+            break
+            
+        # Determine process params
+        if print_subphase == 'FLAT':
+            ramp_mode = 'FLAT'
+            thickness_mode = 'CONSTANT'
+        elif print_subphase == 'RAMP_UP':
+            ramp_mode = 'SPIRAL'
+            thickness_mode = 'UP'
+        elif print_subphase == 'RAMP_DOWN':
+            ramp_mode = 'FLAT'
+            thickness_mode = 'DOWN'
+        elif print_subphase == 'SPIRAL':
+            ramp_mode = 'SPIRAL'
+            thickness_mode = 'CONSTANT'
+        else:
+            raise RuntimeError("Bug: Unknown subphase")
+
+        cur_layer = get_layer_verts(me, bm, read_layer_idx)
+        next_layer = get_layer_verts(me, bm, read_layer_idx+read_layer_idx_delta)
         next_layer_idxs = {v.index for v in next_layer}
         verts_in_layer = len(cur_layer)
-        higher_v_idx = None # last found v idx in higher layer
-        interp_co = None
 
-        # FLAT
-        # RAMP_UP
-        # SPIRAL
-        # ...
-        # SPIRAL
-        # RAMP_DOWN
-        if layer_idx == 0 and ramp_mode == 'FLAT':
-            ramp_mode = 'FLAT'
-        elif layer_idx == 1 and ramp_mode == 'FLAT':
-            ramp_mode = 'RAMP_UP'
-        elif ramp_mode == 'RAMP_UP':
-            ramp_mode = 'SPIRAL'
-        elif layer_idx == layer_idx_max-1 and ramp_mode == 'SPIRAL':
-            ramp_mode = 'RAMP_DOWN'
-        
-        print(f"layer_idx: {layer_idx}, ramp_mode: {ramp_mode}")
+        print(f"read_layer_idx: {read_layer_idx}, spiral_turn_idx: {spiral_turn_idx}")
+        print(f"print_phase: {print_phase}, print_subphase: {print_subphase}")
+        print(f"ramp_mode: {ramp_mode}, thick._mode: {thickness_mode}, rlid: {read_layer_idx_delta}")
         print("verts in layer", verts_in_layer)
 
         v = v_start_layer # for this layer
-        
+        e = find_edge_in_same_direction(interp_co, v_start_layer)
+            
         for i in range(verts_in_layer):
             alpha = i / (verts_in_layer+0) # 0 at beginning of layer, 1 at end
 
-            # Find point one up
+            # Find corresponding point in next_layer
             higher_v_co, higher_v_idx = find_closest_v(kd, next_layer_idxs, v)
             if higher_v_co is None:
                 break
 
             # How to interpolate between this and next layer?
             if ramp_mode == 'FLAT':
-                lerp_factor = 1.0 # Use top curve
-            elif ramp_mode == 'RAMP_DOWN':
-                lerp_factor = 0.0 # Use bottom curve
-            else:
+                lerp_factor = 0.0 # Use bottom
+            elif ramp_mode == 'SPIRAL':
                 lerp_factor = alpha
-
+            else:
+                raise RuntimeError("Bug: unknown ramp_mode")
 
             # Toolhead position
-            prev_interp_co = interp_co
             interp_co = v.co.lerp(higher_v_co, lerp_factor)
             interp_vs.append((interp_co.x, interp_co.y, interp_co.z))
             interp_es.append((vert_idx, vert_idx+1))
 
             # Extrusion amount control
-            if ramp_mode == 'RAMP_UP':
+            if thickness_mode == 'UP':
                 extrusion_height = alpha * default_extrusion_height
-            elif ramp_mode == 'RAMP_DOWN':
+            elif thickness_mode == 'DOWN':
                 extrusion_height = (1-alpha) * default_extrusion_height
-            else:
+            elif thickness_mode == 'CONSTANT':
                 extrusion_height = default_extrusion_height
+            else:
+                raise RuntimeError("Bug: unknown thickness_mode")
+                
             extrusion_heights.append(extrusion_height)
             extrusion_widths.append(extrusion_width)
 
@@ -190,15 +239,17 @@ def spiralize(context, rotation_direction, default_extrusion_height, default_ext
             vert_idx = vert_idx + 1
 
         print("starting new layer at idx", higher_v_idx)
-        wm.progress_update(layer_idx)
-        
+        wm.progress_update(read_layer_idx)
+
+        # Progress to next layer
         try:
-            next_layer = get_layer_verts(me, bm, layer_idx+1)
-            next_layer_idxs = {v.index for v in next_layer}
-            higher_v_co, higher_v_idx = find_closest_v(kd, next_layer_idxs, v_start_layer)
-            v_start_layer = bm.verts[higher_v_idx]
-            e = find_edge_in_same_direction(prev_interp_co, v_start_layer)
-            layer_idx = layer_idx + 1
+            # Find the corresponding v on next_layer to use as new start
+            _, higher_v_idx = find_closest_v(kd, next_layer_idxs, v_start_layer)
+            v_start_layer = bm.verts[higher_v_idx] # vertex where we start to iterate
+
+            spiral_turn_idx = spiral_turn_idx + 1
+            read_layer_idx = read_layer_idx + read_layer_idx_delta
+
         except (IndexError, AttributeError):
             break
 
@@ -275,8 +326,15 @@ class SpiralizeOperator(bpy.types.Operator):
     
     def execute(self, context):
         props = context.scene.spiralizer_settings
+        filament_change_layers = []
+        for fcl in props.filament_change_layers.split(","):
+            try:
+                filament_change_layers.append(int(fcl.strip()))
+            except ValueError:
+                pass
+            
         spiralize(context, props.rotation_direction,
                   props.extrusion_height, props.extrusion_width,
-                  props.toolpath_type)
+                  props.toolpath_type, filament_change_layers)
         return {'FINISHED'}
 
