@@ -26,6 +26,10 @@ class spiralizer_settings(bpy.types.PropertyGroup):
     filament_change_layers : bpy.props.StringProperty(name="Filament change layers",
                                                       default="")
 
+    z_offset : bpy.props.FloatProperty(name="Z-Offset (mm)",
+                                       default=0.2,
+                                       soft_min=0, soft_max=0.8)
+
     gcode_directory : bpy.props.StringProperty(
         name="File", default="", subtype='FILE_PATH',
         description = 'Destination directory.\nIf missing, the .blend-file directory will be used'
@@ -83,6 +87,7 @@ class SlicePanel(bpy.types.Panel):
         col.prop_search(props, 'start_gcode', bpy.data, 'texts')
         col.prop_search(props, 'end_gcode', bpy.data, 'texts')
         col.prop(props, 'gcode_directory')
+        col.prop(props, 'z_offset')
         
         row4 = col.row(align=True)
         row4.scale_y = 2.0
