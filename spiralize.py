@@ -59,7 +59,9 @@ def polygon_direction(v_0, e_idx):
         if v == v_0:
             return s
 
-def spiralize(context, rotation_direction, default_extrusion_height, default_extrusion_width, toolpath_type, filament_change_layers):
+def spiralize(context, rotation_direction,
+              default_extrusion_height, default_extrusion_width,
+              toolpath_type, filament_change_layers):
     print("Spiralize start")
     
     # Get mesh from object
