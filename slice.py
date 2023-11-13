@@ -21,7 +21,7 @@ def slice(context, dz):
     
     # Prepare empty mesh to put result vertices
     mesh_data = bpy.data.meshes.new(name="spiralizer_result")
-    result_ob = bpy.data.objects.new(name="spiralizer_result", object_data=mesh_data)
+    result_ob = bpy.data.objects.new(name=f"{original_name}_slices", object_data=mesh_data)
     result_ob.data['spiralizer_object_type'] = 'SLICES'
     result_ob.data['spiralizer_slice_count'] = N
     
