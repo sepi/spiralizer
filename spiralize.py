@@ -59,6 +59,60 @@ def polygon_direction(v_0, e_idx):
         if v == v_0:
             return s
 
+def mk_outline_layer(kd,
+                     verts_in_layer, next_layer_idxs,
+                     e, v, vert_idx,
+                     ramp_mode, thickness_mode,
+                     default_extrusion_height, extrusion_width, extrusion_material_idx):
+    interp_vs = []
+    interp_es = []
+    extr_heights = []
+    extr_widths = []
+    extr_mat_idxs = []
+    for i in range(verts_in_layer):
+        alpha = i / (verts_in_layer+0) # 0 at beginning of layer, 1 at end
+
+        # Find corresponding point in next_layer
+        higher_v_co, higher_v_idx = find_closest_v(kd, next_layer_idxs, v)
+        if higher_v_co is None:
+            break
+
+        # How to interpolate between this and next layer?
+        if ramp_mode == 'FLAT':
+            lerp_factor = 0.0 # Use bottom
+        elif ramp_mode == 'SPIRAL':
+            lerp_factor = alpha
+        else:
+            raise RuntimeError("Bug: unknown ramp_mode")
+
+        # Toolhead position
+        interp_co = v.co.lerp(higher_v_co, lerp_factor)
+        interp_vs.append((interp_co.x, interp_co.y, interp_co.z))
+        interp_es.append((vert_idx, vert_idx+1))
+
+        # Extrusion amount control
+        if thickness_mode == 'UP':
+            extrusion_height = alpha * default_extrusion_height
+        elif thickness_mode == 'DOWN':
+            extrusion_height = (1-alpha) * default_extrusion_height
+        elif thickness_mode == 'CONSTANT':
+            extrusion_height = default_extrusion_height
+        else:
+            raise RuntimeError("Bug: unknown thickness_mode")
+        
+        extr_heights.append(extrusion_height)
+        extr_widths.append(extrusion_width)
+        extr_mat_idxs.append(extrusion_material_idx)
+
+        # Advance to next edge and vertex
+        [e, v] = next_ev(e, v)
+        vert_idx += 1
+
+    return [interp_vs, interp_es,
+            extr_heights, extr_widths, extr_mat_idxs,
+            e, v,
+            vert_idx]
+        
 def spiralize(context, rotation_direction,
               default_extrusion_height, default_extrusion_width,
               toolpath_type, filament_change_layers):
@@ -204,47 +258,24 @@ def spiralize(context, rotation_direction,
 
         v = v_start_layer # for this layer
         e = find_edge_in_same_direction(interp_co, v_start_layer)
-            
-        for i in range(verts_in_layer):
-            alpha = i / (verts_in_layer+0) # 0 at beginning of layer, 1 at end
 
-            # Find corresponding point in next_layer
-            higher_v_co, higher_v_idx = find_closest_v(kd, next_layer_idxs, v)
-            if higher_v_co is None:
-                break
+        [interp_vs_layer, interp_es_layer,
+         extrusion_heights_layer, extrusion_widths_layer, extrusion_material_idxs_layer,
+         e, v,
+         vert_idx] = mk_outline_layer(kd,
+                                      verts_in_layer, next_layer_idxs,
+                                      e, v, vert_idx,
+                                      ramp_mode, thickness_mode,
+                                      default_extrusion_height, extrusion_width, extrusion_material_idx)
 
-            # How to interpolate between this and next layer?
-            if ramp_mode == 'FLAT':
-                lerp_factor = 0.0 # Use bottom
-            elif ramp_mode == 'SPIRAL':
-                lerp_factor = alpha
-            else:
-                raise RuntimeError("Bug: unknown ramp_mode")
+        print(vert_idx)
 
-            # Toolhead position
-            interp_co = v.co.lerp(higher_v_co, lerp_factor)
-            interp_vs.append((interp_co.x, interp_co.y, interp_co.z))
-            interp_es.append((vert_idx, vert_idx+1))
+        interp_vs += interp_vs_layer
+        interp_es += interp_es_layer
+        extrusion_heights += extrusion_heights_layer
+        extrusion_widths += extrusion_widths_layer
+        extrusion_material_idxs += extrusion_material_idxs_layer
 
-            # Extrusion amount control
-            if thickness_mode == 'UP':
-                extrusion_height = alpha * default_extrusion_height
-            elif thickness_mode == 'DOWN':
-                extrusion_height = (1-alpha) * default_extrusion_height
-            elif thickness_mode == 'CONSTANT':
-                extrusion_height = default_extrusion_height
-            else:
-                raise RuntimeError("Bug: unknown thickness_mode")
-                
-            extrusion_heights.append(extrusion_height)
-            extrusion_widths.append(extrusion_width)
-            extrusion_material_idxs.append(extrusion_material_idx)
-
-            # Advance to next edge and vertex
-            [e, v] = next_ev(e, v)
-            vert_idx = vert_idx + 1
-
-        print("starting new layer at idx", higher_v_idx)
         wm.progress_update(read_layer_idx)
 
         # Progress to next layer
