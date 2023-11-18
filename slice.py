@@ -6,6 +6,9 @@ def slice(context, dz):
     ob = context.object
     original_name = ob.name
     original_ob = bpy.data.objects[original_name]
+
+    # Apply all transforms to be able to read the correct data
+    bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
     
     # Get extent in Z direction
     z_min = math.inf
@@ -51,6 +54,9 @@ def slice(context, dz):
         # Go into edit mode
         if bpy.ops.object.mode_set.poll():
             bpy.ops.object.mode_set(mode='EDIT')
+
+        # all verts must be selected
+        bpy.ops.mesh.select_all(action='SELECT')
 
         # Bisect to keep only one slice of slicer_working_copy    
         if bpy.ops.mesh.bisect.poll():
