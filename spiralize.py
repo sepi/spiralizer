@@ -22,28 +22,14 @@ def next_ev(at_e, at_v):
     edges = at_v.link_edges
     if len(edges) == 2:
         if edges[0] != at_e:
-            edge = edges[0]
+            next_e = edges[0]
         else:
-            edge = edges[1]
-        return [edge, edge.other_vert(at_v)]
+            next_e = edges[1]
+        next_v = next_e.other_vert(at_v)
+        return [next_e, next_v]
     else:
         return [None, at_v]
 
-def find_edge_in_same_direction(co0, v1):
-    "Find edge starting at v1 going in direction v0->v1"
-    e1 = v1.link_edges[0]
-    continue_to_1 = e1.other_vert(v1)
-    e2 = v1.link_edges[1]
-    continue_to_2 = e2.other_vert(v1)
-
-    to_1 = (continue_to_1.co - co0).length
-    to_2 = (continue_to_2.co - co0).length
-
-    if to_1 < to_2:
-        return e1
-    else: 
-        return e2
-    
 def polygon_direction(v_0, e_idx):
     """
     Determine if a polygon is clockwise (>0) or counter-clockwise (<0) when following v_0.link_edges[e_idx].
@@ -51,13 +37,14 @@ def polygon_direction(v_0, e_idx):
     """
     s = 0
     v = v_0
-    v_next = v_0.link_edges[e_idx].other_vert(v)
+    e = v_0.link_edges[e_idx]
     while True:
-        s = s + (v_next.co.x - v.co.x) * (v_next.co.y - v.co.y)
-        v_next = v_next.link_edges[e_idx].other_vert(v_next)
-        v = v_next
-        if v == v_0:
+        [e_next, v_next] = next_ev(e, v)
+        s += (v_next.co.x - v.co.x) * (v_next.co.y + v.co.y)
+        if v_next == v_0:
             return s
+        v = v_next
+        e = e_next
 
 def mk_outline_layer(kd,
                      verts_in_layer, next_layer_idxs,
@@ -143,17 +130,7 @@ def spiralize(context, rotation_direction,
     v_start_layer = get_layer_verts(me, bm, read_layer_idx)[0] # random vertex on starting layer
 
     # determine edge to follow for wanted direction
-    # wanted_rotation_direction = 1 if rotation_direction == 'CW' else -1
-    # print("Rotating in direction 1=cw, -1=ccw: ", wanted_rotation_direction)
-    # try:
-    #     rot_dir0 = polygon_direction(v_start_layer, 0)
-    #     if rot_dir0 * wanted_rotation_direction > 0:
-    #         wanted_edge_idx = 0
-    #     else:
-    #         wanted_edge_idx = 1
-    #     e_0 = v_start_layer.link_edges[wanted_edge_idx]
-    # except IndexError: # happens when layer is a single vertex for example
-    #     e_0 = None
+    wanted_rotation_direction = 1 if rotation_direction == 'CW' else -1
     e_0 = v_start_layer.link_edges[0]
 
     # Work
@@ -164,7 +141,6 @@ def spiralize(context, rotation_direction,
     extrusion_material_idxs = []
 
     interp_co = v_start_layer.co
-    e = e_0 # start in previously determined direction
     vert_idx = 0
     read_layer_idx = 1
     spiral_turn_idx = 0
@@ -257,7 +233,15 @@ def spiralize(context, rotation_direction,
         print("verts in layer", verts_in_layer)
 
         v = v_start_layer # for this layer
-        e = find_edge_in_same_direction(interp_co, v_start_layer)
+        try:
+            # rot dir when following edge[0]
+            if polygon_direction(v, 0) * wanted_rotation_direction > 0: # rot_dir is same direction and wanted_rot_dir
+                e = v.link_edges[0]
+            else:
+                e = v.link_edges[1]
+        except IndexError:
+            print("single vertex layer or something weird happened")
+            break
 
         [interp_vs_layer, interp_es_layer,
          extrusion_heights_layer, extrusion_widths_layer, extrusion_material_idxs_layer,
