@@ -41,7 +41,7 @@ def polygon_direction(v_0, e_idx):
     while True:
         [e_next, v_next] = next_ev(e, v)
         s += (v_next.co.x - v.co.x) * (v_next.co.y + v.co.y)
-        if v_next == v_0:
+        if v == v_0:
             return s
         v = v_next
         e = e_next
