@@ -279,58 +279,16 @@ def spiralize(context, rotation_direction,
     # Create the geometry bearing objects: Either a MESH or a CURVE
     result_name = obj.name+'_spiral'
     if toolpath_type == 'MESH':
-        new_geo = bpy.data.meshes.new(name=result_name)
-        interp_es.pop() # Else there is one too many edges goint to nowhere
-        new_geo.from_pydata(interp_vs, interp_es, [])
-
-        # Set custom attributes
-        attribute = new_geo.attributes.new(name="extrusion_height", type="FLOAT", domain="POINT")
-        attribute.data.foreach_set("value", extrusion_heights)
-
-        attribute = new_geo.attributes.new(name="extrusion_width", type="FLOAT", domain="POINT")
-        attribute.data.foreach_set("value", extrusion_widths)
-
-        attribute = new_geo.attributes.new(name="extrusion_material_idx", type="INT", domain="POINT")
-        attribute.data.foreach_set("value", extrusion_material_idxs)
+        new_geo = mk_mesh_geometry(result_name, interp_es, interp_vs,
+                                   extrusion_heights, extrusion_widths, extrusion_material_idxs)
 
     elif toolpath_type == 'NOZZLEBOSS':
-        vs = []
-        fs = []
-
-        # Top vertices of strip
-        for v in interp_vs:
-            vs.append(v)
-
-        # Bottom vertices of strip
-        v_count = len(interp_vs)
-        for i, v in enumerate(interp_vs):
-            v_below = (v[0],
-                       v[1],
-                       v[2] - extrusion_heights[i])
-            vs.append(v_below)
-
-
-            fs.append((i, i+1, v_count+i+1, v_count+i))
-            
-        fs.pop()
-        new_geo = bpy.data.meshes.new(name=result_name)
-        new_geo.validate(verbose=True)
-        new_geo.from_pydata(vs, [], fs)
+        new_geo = mk_nozzleboss_geometry(result_name, interp_es, interp_vs,
+                                         extrusion_heights, extrusion_widths, extrusion_material_idxs)
 
     elif toolpath_type == 'CURVE':
-        new_geo = bpy.data.curves.new(name=result_name, type='CURVE')
-        new_geo.dimensions = '3D'
-        new_geo.twist_mode = 'Z_UP' # used so we can set the up position on curve easily
-        new_geo.bevel_depth = 0.5 # This is the radius that vertex radius will be multiplied with to get the curve radius
-        sp = new_geo.splines.new(type='POLY')
-        sp.points.add(len(interp_vs)-1)
-        for i in range(len(interp_vs)):
-            p = sp.points[i]
-            p.co.x = interp_vs[i][0]
-            p.co.y = interp_vs[i][1]
-            p.co.z = interp_vs[i][2]
-            p.radius = extrusion_heights[i] / 2
-
+        new_geo = mk_curve_geometry(result_name, interp_es, interp_vs,
+                                    extrusion_heights, extrusion_widths, extrusion_material_idxs)
 
     new_obj = bpy.data.objects.new(new_geo.name, new_geo)
     new_obj.data['spiralizer_object_type'] = 'SPIRAL'
@@ -338,6 +296,63 @@ def spiralize(context, rotation_direction,
     col.objects.link(new_obj)
     print("done")
 
+def mk_mesh_geometry(result_name, es, vs, extrusion_heights, extrusion_widths, extrusion_material_idxs):
+    new_geo = bpy.data.meshes.new(name=result_name)
+    es.pop() # Else there is one too many edges goint to nowhere
+    new_geo.from_pydata(vs, es, [])
+
+    # Set custom attributes
+    attribute = new_geo.attributes.new(name="extrusion_height", type="FLOAT", domain="POINT")
+    attribute.data.foreach_set("value", extrusion_heights)
+
+    attribute = new_geo.attributes.new(name="extrusion_width", type="FLOAT", domain="POINT")
+    attribute.data.foreach_set("value", extrusion_widths)
+
+    attribute = new_geo.attributes.new(name="extrusion_material_idx", type="INT", domain="POINT")
+    attribute.data.foreach_set("value", extrusion_material_idxs)
+
+    return new_geo
+
+def mk_nozzleboss_geometry(result_name, es, vs, extrusion_heights, extrusion_widths, extrusion_material_idxs):
+    vs_out = []
+    fs_out = []
+
+    # Top vertices of strip
+    for v in vs:
+        vs_out.append(v)
+
+    # Bottom vertices of strip
+    v_count = len(vs)
+    for i, v in enumerate(vs):
+        v_below = (v[0],
+                   v[1],
+                   v[2] - extrusion_heights[i])
+        vs_out.append(v_below)
+
+        fs_out.append((i, i+1, v_count+i+1, v_count+i))
+            
+    fs_out.pop()
+    new_geo = bpy.data.meshes.new(name=result_name)
+    new_geo.validate(verbose=True)
+    new_geo.from_pydata(vs_out, [], fs_out)
+
+    return new_geo
+
+def mk_curve_geometry(result_name, es, vs, extrusion_heights, extrusion_widths, extrusion_material_idxs):
+    new_geo = bpy.data.curves.new(name=result_name, type='CURVE')
+    new_geo.dimensions = '3D'
+    new_geo.twist_mode = 'Z_UP' # used so we can set the up position on curve easily
+    new_geo.bevel_depth = 0.5 # This is the radius that vertex radius will be multiplied with to get the curve radius
+    sp = new_geo.splines.new(type='POLY')
+    sp.points.add(len(vs)-1)
+    for i in range(len(vs)):
+        p = sp.points[i]
+        p.co.x = vs[i][0]
+        p.co.y = vs[i][1]
+        p.co.z = vs[i][2]
+        p.radius = extrusion_heights[i] / 2
+
+    return new_geo
 
 class SpiralizeOperator(bpy.types.Operator):
     """Spiralize the selected objects which shall be the result of a slice operation."""
