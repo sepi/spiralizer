@@ -8,9 +8,19 @@ class spiralizer_settings(bpy.types.PropertyGroup):
                                               default=0.1,
                                               soft_min=0.2, soft_max=1.1)
 
-    extrusion_feed_rate: bpy.props.IntProperty(name="Extrusion feed rate (mm/s)",
-                                               default=20,
-                                               soft_min=5, soft_max=200)
+    extrusion_feed_rate_black: bpy.props.IntProperty(name="Feed rate black (mm/s)",
+                                                     default=10,
+                                                     soft_min=5, soft_max=200)
+
+    extrusion_feed_rate_white: bpy.props.IntProperty(name="Feed rate white [default.] (mm/s)",
+                                                     default=40,
+                                                     soft_min=5, soft_max=200)
+
+    extrusion_feed_rate_map: bpy.props.StringProperty(
+        name="Feed rate weightmap - grayscale of vertex color gets mapped feedrate black and white speeds",
+        default="Feedrate"
+    )
+    
     travel_feed_rate : bpy.props.FloatProperty(name="Travel feed rate (mm/s)",
                                                default=100,
                                                soft_min=5, soft_max=200)
@@ -65,28 +75,37 @@ class SlicePanel(bpy.types.Panel):
         
         layout = self.layout
         col = layout.column(align=True)
-        row1 = col.row()
-        row1.prop(props, 'extrusion_height')
-        row1.prop(props, 'extrusion_width')
+        row = col.row()
+        row.prop(props, 'extrusion_height')
+        row.prop(props, 'extrusion_width')
 
-        row13 = col.row()
-        row13.prop(props, 'extrusion_feed_rate')
-        row13.prop(props, 'travel_feed_rate')
-        
-        row2 = col.row()
-        row2.prop(props, 'rotation_direction')
+        row = col.row()
+        row.prop(props, 'extrusion_feed_rate_white')
 
-        row2 = col.row()
-        row2.prop(props, 'toolpath_type')
+        row = col.row()
+        row.prop(props, 'extrusion_feed_rate_black')
+
+        row = col.row()
+        row.prop_search(props, "extrusion_feed_rate_map",
+                        context.active_object.data, "color_attributes", text="Feed rate")
+
+        row = col.row()
+        row.prop(props, 'travel_feed_rate')
         
-        row2 = col.row()
-        row2.operator('spiralizer.slice')
+        row = col.row()
+        row.prop(props, 'rotation_direction')
+
+        row = col.row()
+        row.prop(props, 'toolpath_type')
+        
+        row = col.row()
+        row.operator('spiralizer.slice')
 
         row = col.row()
         row.prop(props, 'filament_change_layers')
         
-        row3 = col.row()
-        row3.operator('spiralizer.spiralize')
+        row = col.row()
+        row.operator('spiralizer.spiralize')
 
         col.separator()
         col.label(text='Export', icon='TEXT')
@@ -96,6 +115,6 @@ class SlicePanel(bpy.types.Panel):
         col.prop(props, 'gcode_directory')
         col.prop(props, 'z_offset')
         
-        row4 = col.row(align=True)
-        row4.scale_y = 2.0
-        row4.operator('spiralizer.gcode_export')
+        row = col.row(align=True)
+        row.scale_y = 2.0
+        row.operator('spiralizer.gcode_export')

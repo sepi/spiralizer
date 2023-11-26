@@ -19,11 +19,18 @@ This software was inspired and partially copied from Alessandro Zomparelli's [gc
 9. Print and enjoy!
 
 ## TODO
-* Control temperature from UI
-* Color changes
-* Print from from blender
-* Automatic subdivision
-* Modulate flow rate by painting
-* Modulate speed by painting (maybe)
-* Support several objects on one plate
-* Export properly in nozzleboss quad-strip and gcode-exporter curve format.
+* [x] Color changes based on layers
+* [x] Modulate speed by vertex painting (color_attribute)
+* [ ] Basic spider generator
+* [ ] Automatic subdivision
+* [ ] Modulate flow rate/layer width by painting
+* [ ] Base cells
+* [ ] Name results based on original mesh and put in same place
+* [ ] Select all verts in mesh before cutting
+* [ ] Do slicing and spiralizing in one step
+* [ ] Color changes based on other params
+* [ ] Control temperature from UI
+* [ ] Print from from blender
+* [ ] Support several objects on one plate
+* [ ] Export properly in nozzleboss quad-strip and gcode-exporter curve format
+* [ ] Adaptive layer height

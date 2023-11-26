@@ -46,16 +46,18 @@ def polygon_direction(v_0, e_idx):
         v = v_next
         e = e_next
 
-def mk_outline_layer(kd,
+def mk_outline_layer(me, kd,
                      verts_in_layer, next_layer_idxs,
                      e, v, vert_idx,
-                     ramp_mode, thickness_mode,
+                     ramp_mode, thickness_mode, feedrate_color_attribute,
                      default_extrusion_height, extrusion_width, extrusion_material_idx):
     interp_vs = []
     interp_es = []
     extr_heights = []
     extr_widths = []
     extr_mat_idxs = []
+    extr_feedrate_facts = []
+    
     for i in range(verts_in_layer):
         alpha = i / (verts_in_layer+0) # 0 at beginning of layer, 1 at end
 
@@ -86,23 +88,35 @@ def mk_outline_layer(kd,
             extrusion_height = default_extrusion_height
         else:
             raise RuntimeError("Bug: unknown thickness_mode")
+
+        # Feedrate
+        if feedrate_color_attribute in me.color_attributes:
+            try:
+                # Just read RED since we use grayscale
+                color_r = me.color_attributes[feedrate_color_attribute].data[vert_idx].color[0]
+            except IndexError:
+                color_r = 0
+            extr_feedrate_fact = color_r
+        else:
+            extr_feedrate_fact = 1
         
         extr_heights.append(extrusion_height)
         extr_widths.append(extrusion_width)
         extr_mat_idxs.append(extrusion_material_idx)
+        extr_feedrate_facts.append(extr_feedrate_fact)
 
         # Advance to next edge and vertex
         [e, v] = next_ev(e, v)
         vert_idx += 1
 
     return [interp_vs, interp_es,
-            extr_heights, extr_widths, extr_mat_idxs,
+            extr_heights, extr_widths, extr_mat_idxs, extr_feedrate_facts,
             e, v,
             vert_idx]
         
 def spiralize(context, rotation_direction,
               default_extrusion_height, default_extrusion_width,
-              toolpath_type, filament_change_layers):
+              toolpath_type, filament_change_layers, feedrate_color_attribute):
     print("Spiralize start")
     
     # Get mesh from object
@@ -151,6 +165,7 @@ def spiralize(context, rotation_direction,
     extrusion_heights = []
     extrusion_widths = []
     extrusion_material_idxs = []
+    extrusion_feedrate_factors = []
 
     vert_idx = 0
     spiral_turn_idx = 0
@@ -255,12 +270,12 @@ def spiralize(context, rotation_direction,
             break
 
         [output_vs_layer, output_es_layer,
-         extrusion_heights_layer, extrusion_widths_layer, extrusion_material_idxs_layer,
+         extrusion_heights_layer, extrusion_widths_layer, extrusion_material_idxs_layer, extrusion_feedrate_factors_layer,
          e, v,
-         vert_idx] = mk_outline_layer(kd,
+         vert_idx] = mk_outline_layer(me, kd,
                                       verts_in_layer, next_layer_idxs,
                                       e, v, vert_idx,
-                                      ramp_mode, thickness_mode,
+                                      ramp_mode, thickness_mode, feedrate_color_attribute,
                                       default_extrusion_height, extrusion_width, extrusion_material_idx)
 
         output_vs += output_vs_layer
@@ -268,6 +283,7 @@ def spiralize(context, rotation_direction,
         extrusion_heights += extrusion_heights_layer
         extrusion_widths += extrusion_widths_layer
         extrusion_material_idxs += extrusion_material_idxs_layer
+        extrusion_feedrate_factors += extrusion_feedrate_factors_layer
 
         wm.progress_update(read_layer_idx)
 
@@ -289,7 +305,7 @@ def spiralize(context, rotation_direction,
     result_name = obj.name+'_spiral'
     if toolpath_type == 'MESH':
         new_geo = mk_mesh_geometry(result_name, output_es, output_vs,
-                                   extrusion_heights, extrusion_widths, extrusion_material_idxs)
+                                   extrusion_heights, extrusion_widths, extrusion_material_idxs, extrusion_feedrate_factors)
 
     elif toolpath_type == 'NOZZLEBOSS':
         new_geo = mk_nozzleboss_geometry(result_name, output_es, output_vs,
@@ -305,7 +321,8 @@ def spiralize(context, rotation_direction,
     col.objects.link(new_obj)
     print("done")
 
-def mk_mesh_geometry(result_name, es, vs, extrusion_heights, extrusion_widths, extrusion_material_idxs):
+def mk_mesh_geometry(result_name, es, vs,
+                     extrusion_heights, extrusion_widths, extrusion_material_idxs, extrusion_feedrate_factors):
     new_geo = bpy.data.meshes.new(name=result_name)
     es.pop() # Else there is one too many edges goint to nowhere
     new_geo.from_pydata(vs, es, [])
@@ -319,6 +336,9 @@ def mk_mesh_geometry(result_name, es, vs, extrusion_heights, extrusion_widths, e
 
     attribute = new_geo.attributes.new(name="extrusion_material_idx", type="INT", domain="POINT")
     attribute.data.foreach_set("value", extrusion_material_idxs)
+
+    attribute = new_geo.attributes.new(name="extrusion_feedrate_factor", type="FLOAT", domain="POINT")
+    attribute.data.foreach_set("value", extrusion_feedrate_factors)
 
     return new_geo
 
@@ -383,6 +403,6 @@ class SpiralizeOperator(bpy.types.Operator):
             
         spiralize(context, props.rotation_direction,
                   props.extrusion_height, props.extrusion_width,
-                  props.toolpath_type, filament_change_layers)
+                  props.toolpath_type, filament_change_layers, props.extrusion_feed_rate_map)
         return {'FINISHED'}
 

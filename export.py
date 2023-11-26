@@ -42,7 +42,7 @@ def write_code_from_block(stream, block):
     
 def export(context, gcode_directory,
            start_gcode, filament_change_gcode, end_gcode,
-           travel_feed_rate, extrusion_feed_rate, z_offset):
+           travel_feed_rate, extrusion_feed_rate_white, extrusion_feed_rate_black, z_offset):
     if gcode_directory == '':
         directory = '//' + os.path.splitext(bpy.path.basename(bpy.context.blend_data.filepath))[0]
     else:
@@ -63,13 +63,15 @@ def export(context, gcode_directory,
         z0 = co.z
         dz = z_offset - z0
         write_code(export_file, "G0", co=offset_z(co, dz+0.1), f=mms_to_mmmin(travel_feed_rate))
-        write_code(export_file, "G1", z=z_offset, f=mms_to_mmmin(extrusion_feed_rate))
+        write_code(export_file, "G1", z=z_offset, f=mms_to_mmmin(extrusion_feed_rate_white))
 
         # Init export loop
         v_last = me.vertices[0]
         h_last = me.attributes['extrusion_height'].data[0].value
         w_last = me.attributes['extrusion_width'].data[0].value
         mi_last = me.attributes['extrusion_material_idx'].data[0].value
+        eff_last = me.attributes['extrusion_feedrate_factor'].data[0].value
+
         e = 0 # Accumulate extrusion coordinate
         for i in range(1, len(me.vertices)):
             v = me.vertices[i]
@@ -78,12 +80,16 @@ def export(context, gcode_directory,
             h = me.attributes['extrusion_height'].data[i].value
             w = me.attributes['extrusion_width'].data[i].value
             mi = me.attributes['extrusion_material_idx'].data[i].value
+            eff = me.attributes['extrusion_feedrate_factor'].data[i].value
+
+            # Extrusion amount
             l_out = (v.co - v_last.co).length # length of material going out
             volume_out = l_out * h * w # volume going out
             l_in = volume_out / (math.pi * (1.75/2)**2) # length of filamgent going in
             e = e + l_in
 
-            print(v.co, v_last.co, l_out, l_in)
+            # Feedrate
+            extrusion_feed_rate = extrusion_feed_rate_black + eff * (extrusion_feed_rate_white - extrusion_feed_rate_black)
 
             # Write that line  F{mms_to_mmmin(extrusion_feed_rate)}
             co = offset_z(v.co, dz)
@@ -116,6 +122,7 @@ class GcodeExportOperator(bpy.types.Operator):
         props = context.scene.spiralizer_settings
         path = export(context, props.gcode_directory,
                       props.start_gcode, props.filament_change_gcode, props.end_gcode,
-                      props.travel_feed_rate, props.extrusion_feed_rate, props.z_offset)
+                      props.travel_feed_rate, props.extrusion_feed_rate_white, props.extrusion_feed_rate_black,
+                      props.z_offset)
         self.report({'INFO'}, f"Successfully wrote g-code to {path}.")
         return {'FINISHED'}
