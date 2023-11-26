@@ -124,9 +124,21 @@ def spiralize(context, rotation_direction,
         kd.insert(v.co, i)
     kd.balance()
 
+    # Count layers (the amount of layers created during initial slicing)
+    read_layer_count = obj.data['spiralizer_slice_count']
+
     # Initialize variables for layer iterations
     read_layer_idx = 1
     spiral_turn_idx = 0
+
+    # Find first layer with geometry in it
+    vert_count = 0
+    while vert_count == 0 and read_layer_idx < read_layer_count:
+        vs = get_layer_verts(me, bm, read_layer_idx) # FIXME: This is slow. Maybe build some cache first.
+        vert_count = len(vs)
+        read_layer_idx += 1
+
+    # Start-vertex in this layer
     v_start_layer = get_layer_verts(me, bm, read_layer_idx)[0] # random vertex on starting layer
 
     # determine edge to follow for wanted direction
@@ -134,15 +146,13 @@ def spiralize(context, rotation_direction,
     e_0 = v_start_layer.link_edges[0]
 
     # Work
-    interp_vs = [] # interpolated vertices
-    interp_es = [] # interpolated edges
+    output_vs = [] # interpolated vertices
+    output_es = [] # interpolated edges
     extrusion_heights = []
     extrusion_widths = []
     extrusion_material_idxs = []
 
-    interp_co = v_start_layer.co
     vert_idx = 0
-    read_layer_idx = 1
     spiral_turn_idx = 0
     ramp_mode = None
     thickness_mode = None
@@ -153,9 +163,6 @@ def spiralize(context, rotation_direction,
     extrusion_height = default_extrusion_height
     extrusion_width = default_extrusion_width
 
-    # Count layers
-    read_layer_count = obj.data['spiralizer_slice_count']
-
     # Progress bar
     wm = context.window_manager
     wm.progress_begin(0, read_layer_count)
@@ -165,10 +172,10 @@ def spiralize(context, rotation_direction,
     while True:
         # print_phase  print_subphase
         # ---------------------------
-        # BOTTOM       FLAT
-        # BOTTOM       RAMP_UP
-        # SPIRAL       SPIRAL
-        # ...
+        # BOTTOM       FLAT                |
+        # BOTTOM       RAMP_UP             | up
+        # SPIRAL       SPIRAL              |
+        # ...                              v
         # SPIRAL       SPIRAL
         # FILAMENT_CH. RAMP_DOWN
         # FILAMENT_CH. RAMP_UP
@@ -227,6 +234,10 @@ def spiralize(context, rotation_direction,
         next_layer_idxs = {v.index for v in next_layer}
         verts_in_layer = len(cur_layer)
 
+        if verts_in_layer == 0:
+            read_layer_idx += 1
+            continue
+
         print(f"read_layer_idx: {read_layer_idx}, spiral_turn_idx: {spiral_turn_idx}")
         print(f"print_phase: {print_phase}, print_subphase: {print_subphase}")
         print(f"ramp_mode: {ramp_mode}, thick._mode: {thickness_mode}, rlid: {read_layer_idx_delta}")
@@ -243,7 +254,7 @@ def spiralize(context, rotation_direction,
             print("single vertex layer or something weird happened")
             break
 
-        [interp_vs_layer, interp_es_layer,
+        [output_vs_layer, output_es_layer,
          extrusion_heights_layer, extrusion_widths_layer, extrusion_material_idxs_layer,
          e, v,
          vert_idx] = mk_outline_layer(kd,
@@ -252,10 +263,8 @@ def spiralize(context, rotation_direction,
                                       ramp_mode, thickness_mode,
                                       default_extrusion_height, extrusion_width, extrusion_material_idx)
 
-        print(vert_idx)
-
-        interp_vs += interp_vs_layer
-        interp_es += interp_es_layer
+        output_vs += output_vs_layer
+        output_es += output_es_layer
         extrusion_heights += extrusion_heights_layer
         extrusion_widths += extrusion_widths_layer
         extrusion_material_idxs += extrusion_material_idxs_layer
@@ -279,15 +288,15 @@ def spiralize(context, rotation_direction,
     # Create the geometry bearing objects: Either a MESH or a CURVE
     result_name = obj.name+'_spiral'
     if toolpath_type == 'MESH':
-        new_geo = mk_mesh_geometry(result_name, interp_es, interp_vs,
+        new_geo = mk_mesh_geometry(result_name, output_es, output_vs,
                                    extrusion_heights, extrusion_widths, extrusion_material_idxs)
 
     elif toolpath_type == 'NOZZLEBOSS':
-        new_geo = mk_nozzleboss_geometry(result_name, interp_es, interp_vs,
+        new_geo = mk_nozzleboss_geometry(result_name, output_es, output_vs,
                                          extrusion_heights, extrusion_widths, extrusion_material_idxs)
 
     elif toolpath_type == 'CURVE':
-        new_geo = mk_curve_geometry(result_name, interp_es, interp_vs,
+        new_geo = mk_curve_geometry(result_name, output_es, output_vs,
                                     extrusion_heights, extrusion_widths, extrusion_material_idxs)
 
     new_obj = bpy.data.objects.new(new_geo.name, new_geo)
