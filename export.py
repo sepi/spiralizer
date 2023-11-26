@@ -1,6 +1,7 @@
 import bpy
 import math
 import os
+import mathutils
 
 def mms_to_mmmin(mms):
     return int(mms*60.0)
@@ -30,8 +31,7 @@ def write_code(stream, opcode, **kwargs):
     stream.write(code(opcode, **kwargs) + "\n");
 
 def offset_z(co, dz):
-    co.z = co.z + dz
-    return co
+    return mathutils.Vector((co.x, co.y, co.z + dz))
 
 def write_code_from_block(stream, block):
     try:
@@ -73,7 +73,6 @@ def export(context, gcode_directory,
         e = 0 # Accumulate extrusion coordinate
         for i in range(1, len(me.vertices)):
             v = me.vertices[i]
-            co = v.co
 
             # Extrusion params
             h = me.attributes['extrusion_height'].data[i].value
@@ -84,8 +83,11 @@ def export(context, gcode_directory,
             l_in = volume_out / (math.pi * (1.75/2)**2) # length of filamgent going in
             e = e + l_in
 
+            print(v.co, v_last.co, l_out, l_in)
+
             # Write that line  F{mms_to_mmmin(extrusion_feed_rate)}
-            write_code(export_file, "G1", co=offset_z(co, dz), e=l_in, f=mms_to_mmmin(extrusion_feed_rate))
+            co = offset_z(v.co, dz)
+            write_code(export_file, "G1", co=co, e=l_in, f=mms_to_mmmin(extrusion_feed_rate))
 
             if (mi_last != mi):
                 write_code_from_block(export_file, filament_change_gcode)
@@ -108,7 +110,7 @@ class GcodeExportOperator(bpy.types.Operator):
     
     @classmethod
     def poll(cls, context):
-        return context.object is not None and context.mode in {'OBJECT'} and context.active_object.data.get('spiralizer_object_type', None) == 'SPIRAL'
+        return context.object is not None  #and context.mode in {'OBJECT'} and context.active_object.data.get('spiralizer_object_type', None) == 'SPIRAL'
 
     def execute(self, context):
         props = context.scene.spiralizer_settings
