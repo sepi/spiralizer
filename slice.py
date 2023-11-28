@@ -92,7 +92,10 @@ class SliceOperator(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
-        return context.object is not None and context.mode in {'OBJECT'} and context.active_object.data.get('spiralizer_object_type', None) == None
+        return context.object is not None and \
+            context.mode in {'OBJECT'} and \
+            hasattr(context.active_object, 'data') and \
+            context.active_object.data.get('spiralizer_object_type', None) == None
     
 #    def invoke(self, context, event):
 #        return context.window_manager.invoke_props_dialog(self)

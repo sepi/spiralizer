@@ -390,7 +390,10 @@ class SpiralizeOperator(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
-        return context.object is not None and context.mode in {'OBJECT'} and context.active_object.data.get('spiralizer_object_type', None) == 'SLICES'
+        return context.object is not None and \
+            context.mode in {'OBJECT'} and \
+            hasattr(context.active_object, 'data') and \
+            context.active_object.data.get('spiralizer_object_type', None) == 'SLICES'
     
     def execute(self, context):
         props = context.scene.spiralizer_settings

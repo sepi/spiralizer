@@ -85,9 +85,11 @@ class SlicePanel(bpy.types.Panel):
         row = col.row()
         row.prop(props, 'extrusion_feed_rate_black')
 
-        row = col.row()
-        row.prop_search(props, "extrusion_feed_rate_map",
-                        context.active_object.data, "color_attributes", text="Feed rate")
+        if hasattr(context.active_object, 'data'):
+            data = context.active_object.data
+            row = col.row()
+            row.prop_search(props, "extrusion_feed_rate_map", data,
+                            "color_attributes", text="Feed rate")
 
         row = col.row()
         row.prop(props, 'travel_feed_rate')
